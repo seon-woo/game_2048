@@ -1,264 +1,280 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Trophy, RotateCcw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-
-const GRID_SIZE = 4;
-
-const App = () => {
-  const [grid, setGrid] = useState([]);
-  const [score, setScore] = useState(0);
-  const [bestScore, setBestScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const [gameWin, setGameWin] = useState(false);
-  const [touchStart, setTouchStart] = useState(null);
-
-  // 게임 초기화
-  const initGame = useCallback(() => {
-    let newGrid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
-    newGrid = addRandomTile(newGrid);
-    newGrid = addRandomTile(newGrid);
-    setGrid(newGrid);
-    setScore(0);
-    setGameOver(false);
-    setGameWin(false);
-  }, []);
-
-  useEffect(() => {
-    initGame();
-    const savedBest = localStorage.getItem('2048-best-score');
-    if (savedBest) setBestScore(parseInt(savedBest));
-  }, [initGame]);
-
-  useEffect(() => {
-    if (score > bestScore) {
-      setBestScore(score);
-      localStorage.setItem('2048-best-score', score.toString());
-    }
-  }, [score, bestScore]);
-
-  // 빈 칸에 2 또는 4 추가
-  const addRandomTile = (currentGrid) => {
-    const emptyTiles = [];
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        if (currentGrid[r][c] === 0) emptyTiles.push({ r, c });
-      }
-    }
-    if (emptyTiles.length === 0) return currentGrid;
-
-    const { r, c } = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
-    const newGrid = [...currentGrid.map(row => [...row])];
-    newGrid[r][c] = Math.random() < 0.9 ? 2 : 4;
-    return newGrid;
-  };
-
-  // 게임 오버 체크
-  const checkGameOver = (currentGrid) => {
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        if (currentGrid[r][c] === 0) return false;
-        if (c < GRID_SIZE - 1 && currentGrid[r][c] === currentGrid[r][c + 1]) return false;
-        if (r < GRID_SIZE - 1 && currentGrid[r][c] === currentGrid[r + 1][c]) return false;
-      }
-    }
-    return true;
-  };
-
-  // 타일 이동 로직
-  const move = useCallback((direction) => {
-    if (gameOver) return;
-
-    let newGrid = [...grid.map(row => [...row])];
-    let moved = false;
-    let addedScore = 0;
-
-    const rotateGrid = (g) => {
-      return g[0].map((_, colIndex) => g.map(row => row[colIndex]).reverse());
-    };
-
-    // 로직을 단순화하기 위해 모든 방향을 '왼쪽 이동'으로 변환하여 처리
-    let rotations = 0;
-    if (direction === 'UP') rotations = 3;
-    if (direction === 'RIGHT') rotations = 2;
-    if (direction === 'DOWN') rotations = 1;
-
-    for (let i = 0; i < rotations; i++) newGrid = rotateGrid(newGrid);
-
-    // 각 행 처리
-    for (let r = 0; r < GRID_SIZE; r++) {
-      let row = newGrid[r].filter(val => val !== 0);
-      for (let i = 0; i < row.length - 1; i++) {
-        if (row[i] === row[i + 1]) {
-          row[i] *= 2;
-          addedScore += row[i];
-          row.splice(i + 1, 1);
-          if (row[i] === 2048) setGameWin(true);
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2048 챌린지</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            user-select: none;
+            overflow: hidden;
+            touch-action: none;
         }
-      }
-      while (row.length < GRID_SIZE) row.push(0);
-      
-      if (JSON.stringify(newGrid[r]) !== JSON.stringify(row)) moved = true;
-      newGrid[r] = row;
-    }
 
-    // 원래 방향으로 다시 돌려놓기
-    for (let i = 0; i < (4 - rotations) % 4; i++) newGrid = rotateGrid(newGrid);
+        .tile {
+            transition: transform 100ms ease-in-out, background-color 100ms ease-in-out;
+        }
 
-    if (moved) {
-      const gridWithNewTile = addRandomTile(newGrid);
-      setGrid(gridWithNewTile);
-      setScore(s => s + addedScore);
-      if (checkGameOver(gridWithNewTile)) setGameOver(true);
-    }
-  }, [grid, gameOver]);
+        .tile-new {
+            animation: appear 200ms ease-out;
+        }
 
-  // 키보드 이벤트
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        e.preventDefault();
-        if (e.key === 'ArrowUp') move('UP');
-        if (e.key === 'ArrowDown') move('DOWN');
-        if (e.key === 'ArrowLeft') move('LEFT');
-        if (e.key === 'ArrowRight') move('RIGHT');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [move]);
+        @keyframes appear {
+            0% { opacity: 0; transform: scale(0); }
+            100% { opacity: 1; transform: scale(1); }
+        }
 
-  // 터치 이벤트 (모바일)
-  const onTouchStart = (e) => setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-  const onTouchEnd = (e) => {
-    if (!touchStart) return;
-    const dx = e.changedTouches[0].clientX - touchStart.x;
-    const dy = e.changedTouches[0].clientY - touchStart.y;
-    const absDx = Math.abs(dx);
-    const absDy = Math.abs(dy);
+        .tile-merge {
+            animation: pop 200ms ease-in-out;
+        }
 
-    if (Math.max(absDx, absDy) > 30) {
-      if (absDx > absDy) {
-        move(dx > 0 ? 'RIGHT' : 'LEFT');
-      } else {
-        move(dy > 0 ? 'DOWN' : 'UP');
-      }
-    }
-    setTouchStart(null);
-  };
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
 
-  const getTileColor = (value) => {
-    const colors = {
-      0: 'bg-gray-800/50',
-      2: 'bg-gray-700 text-gray-200',
-      4: 'bg-gray-600 text-gray-100',
-      8: 'bg-orange-500 text-white',
-      16: 'bg-orange-600 text-white',
-      32: 'bg-rose-500 text-white',
-      64: 'bg-rose-600 text-white',
-      128: 'bg-amber-400 text-gray-900 text-2xl',
-      256: 'bg-amber-500 text-gray-900 text-2xl',
-      512: 'bg-yellow-500 text-gray-900 text-2xl',
-      1024: 'bg-yellow-600 text-white text-xl',
-      2048: 'bg-indigo-600 text-white text-xl shadow-[0_0_20px_rgba(79,70,229,0.6)]',
-    };
-    return colors[value] || 'bg-indigo-900 text-white';
-  };
+        .grid-container {
+            aspect-ratio: 1 / 1;
+        }
 
-  return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-200 flex flex-col items-center justify-center p-4 font-sans select-none overflow-hidden">
-      {/* Header */}
-      <div className="w-full max-w-[400px] flex justify-between items-end mb-6">
+        /* Tile Colors */
+        .tile-0 { background-color: rgba(30, 41, 59, 0.5); }
+        .tile-2 { background-color: #334155; color: #e2e8f0; }
+        .tile-4 { background-color: #475569; color: #f1f5f9; }
+        .tile-8 { background-color: #f97316; color: white; }
+        .tile-16 { background-color: #ea580c; color: white; }
+        .tile-32 { background-color: #f43f5e; color: white; }
+        .tile-64 { background-color: #e11d48; color: white; }
+        .tile-128 { background-color: #fbbf24; color: #0f172a; font-size: 1.5rem; }
+        .tile-256 { background-color: #f59e0b; color: #0f172a; font-size: 1.5rem; }
+        .tile-512 { background-color: #eab308; color: #0f172a; font-size: 1.5rem; }
+        .tile-1024 { background-color: #ca8a04; color: white; font-size: 1.25rem; }
+        .tile-2048 { background-color: #4f46e5; color: white; font-size: 1.25rem; box-shadow: 0 0 20px rgba(79, 70, 229, 0.6); }
+    </style>
+</head>
+<body class="min-h-screen text-slate-200 flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-[400px] flex justify-between items-end mb-6">
         <div>
-          <h1 className="text-5xl font-black text-white tracking-tighter">2048</h1>
-          <p className="text-slate-400 font-medium">타일을 합쳐보세요!</p>
+            <h1 class="text-5xl font-black text-white tracking-tighter">2048</h1>
+            <p class="text-slate-400 font-medium">타일을 합쳐보세요!</p>
         </div>
-        <div className="flex gap-2">
-          <div className="bg-slate-800 px-4 py-2 rounded-xl text-center min-w-[80px] border border-slate-700">
-            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">Score</p>
-            <p className="text-xl font-bold text-white">{score}</p>
-          </div>
-          <div className="bg-slate-800 px-4 py-2 rounded-xl text-center min-w-[80px] border border-slate-700">
-            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">Best</p>
-            <p className="text-xl font-bold text-white">{bestScore}</p>
-          </div>
+        <div class="flex gap-2">
+            <div class="bg-slate-800 px-4 py-2 rounded-xl text-center min-w-[80px] border border-slate-700">
+                <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Score</p>
+                <p id="score" class="text-xl font-bold text-white">0</p>
+            </div>
+            <div class="bg-slate-800 px-4 py-2 rounded-xl text-center min-w-[80px] border border-slate-700">
+                <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Best</p>
+                <p id="best-score" class="text-xl font-bold text-white">0</p>
+            </div>
         </div>
-      </div>
-
-      <div className="w-full max-w-[400px] flex justify-between items-center mb-4">
-        <button 
-          onClick={initGame}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 active:scale-95"
-        >
-          <RotateCcw size={18} /> 새 게임
-        </button>
-      </div>
-
-      {/* Game Board */}
-      <div 
-        className="relative bg-slate-800 p-3 rounded-2xl shadow-2xl border-4 border-slate-800"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
-        <div className="grid grid-cols-4 gap-3">
-          {grid.map((row, r) => (
-            row.map((value, c) => (
-              <div
-                key={`${r}-${c}`}
-                className={`w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-xl text-3xl font-black transition-all duration-100 ${getTileColor(value)}`}
-              >
-                {value !== 0 ? value : ''}
-              </div>
-            ))
-          ))}
-        </div>
-
-        {/* Game Over / Win Overlay */}
-        {(gameOver || gameWin) && (
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
-            {gameWin && !gameOver ? (
-              <>
-                <div className="bg-yellow-500 p-4 rounded-full mb-4 shadow-[0_0_30px_rgba(234,179,8,0.4)]">
-                  <Trophy className="text-white w-12 h-12" />
-                </div>
-                <h2 className="text-3xl font-black text-white mb-2">승리했습니다!</h2>
-                <p className="text-slate-300 mb-6">2048 타일을 만들었군요!</p>
-              </>
-            ) : (
-              <>
-                <h2 className="text-4xl font-black text-white mb-2">게임 오버</h2>
-                <p className="text-slate-300 mb-6">더 이상 이동할 곳이 없어요.</p>
-              </>
-            )}
-            <button
-              onClick={initGame}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
-            >
-              다시 시작하기
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Controls Info (Desktop only) */}
-      <div className="mt-8 grid grid-cols-3 gap-2 opacity-40 hidden sm:grid">
-        <div className="col-start-2 flex justify-center">
-          <div className="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><ChevronUp size={20} /></div>
-        </div>
-        <div className="col-start-1 flex justify-center">
-          <div className="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><ChevronLeft size={20} /></div>
-        </div>
-        <div className="col-start-2 flex justify-center">
-          <div className="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><ChevronDown size={20} /></div>
-        </div>
-        <div className="col-start-3 flex justify-center">
-          <div className="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><ChevronRight size={20} /></div>
-        </div>
-      </div>
-
-      <p className="mt-6 text-slate-500 text-sm font-medium sm:hidden">
-        화면을 상하좌우로 밀어서 타일을 합치세요!
-      </p>
     </div>
-  );
-};
 
-export default App;
+    <div class="w-full max-w-[400px] flex justify-between items-center mb-4">
+        <button id="reset-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 active:scale-95">
+            <i class="fas fa-redo-alt"></i> 새 게임
+        </button>
+    </div>
+
+    <div class="relative bg-slate-800 p-3 rounded-2xl shadow-2xl border-4 border-slate-800 grid-container w-full max-w-[400px]">
+        <div id="grid" class="grid grid-cols-4 gap-3 h-full w-full">
+            <!-- Tiles will be generated here -->
+        </div>
+
+        <!-- Overlays -->
+        <div id="game-over" class="hidden absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 z-10">
+            <h2 id="over-title" class="text-4xl font-black text-white mb-2">게임 오버</h2>
+            <p id="over-desc" class="text-slate-300 mb-6">더 이상 이동할 곳이 없어요.</p>
+            <button id="restart-btn" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95">
+                다시 시작하기
+            </button>
+        </div>
+    </div>
+
+    <div class="mt-8 grid grid-cols-3 gap-2 opacity-40 hidden sm:grid">
+        <div class="col-start-2 flex justify-center"><div class="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><i class="fas fa-chevron-up"></i></div></div>
+        <div class="col-start-1 flex justify-center"><div class="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><i class="fas fa-chevron-left"></i></div></div>
+        <div class="col-start-2 flex justify-center"><div class="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><i class="fas fa-chevron-down"></i></div></div>
+        <div class="col-start-3 flex justify-center"><div class="w-10 h-10 border border-slate-500 rounded flex items-center justify-center"><i class="fas fa-chevron-right"></i></div></div>
+    </div>
+
+    <p class="mt-6 text-slate-500 text-sm font-medium sm:hidden">
+        화면을 상하좌우로 밀어서 타일을 합치세요!
+    </p>
+
+    <script>
+        const GRID_SIZE = 4;
+        let grid = [];
+        let score = 0;
+        let bestScore = localStorage.getItem('2048-best-score') || 0;
+        let gameOver = false;
+        let gameWin = false;
+
+        const gridElement = document.getElementById('grid');
+        const scoreElement = document.getElementById('score');
+        const bestScoreElement = document.getElementById('best-score');
+        const gameOverOverlay = document.getElementById('game-over');
+        const overTitle = document.getElementById('over-title');
+        const overDesc = document.getElementById('over-desc');
+
+        function initGame() {
+            grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            score = 0;
+            gameOver = false;
+            gameWin = false;
+            addRandomTile();
+            addRandomTile();
+            updateUI();
+            bestScoreElement.innerText = bestScore;
+        }
+
+        function addRandomTile() {
+            const emptyTiles = [];
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === 0) emptyTiles.push({ r, c });
+                }
+            }
+            if (emptyTiles.length === 0) return;
+
+            const { r, c } = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+            grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+        }
+
+        function updateUI() {
+            gridElement.innerHTML = '';
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const value = grid[r][c];
+                    const tile = document.createElement('div');
+                    tile.className = `w-full h-full flex items-center justify-center rounded-xl font-black text-3xl tile tile-${value}`;
+                    if (value !== 0) {
+                        tile.innerText = value;
+                        tile.classList.add('tile-new');
+                    }
+                    gridElement.appendChild(tile);
+                }
+            }
+            scoreElement.innerText = score;
+            if (score > bestScore) {
+                bestScore = score;
+                bestScoreElement.innerText = bestScore;
+                localStorage.setItem('2048-best-score', bestScore);
+            }
+
+            if (gameOver || gameWin) {
+                gameOverOverlay.classList.remove('hidden');
+                if (gameWin && !gameOver) {
+                    overTitle.innerText = "승리했습니다!";
+                    overDesc.innerText = "2048 타일을 만들었군요!";
+                } else {
+                    overTitle.innerText = "게임 오버";
+                    overDesc.innerText = "더 이상 이동할 곳이 없어요.";
+                }
+            } else {
+                gameOverOverlay.classList.add('hidden');
+            }
+        }
+
+        function rotateGrid(g) {
+            return g[0].map((_, colIndex) => g.map(row => row[colIndex]).reverse());
+        }
+
+        function move(direction) {
+            if (gameOver) return;
+
+            let moved = false;
+            let addedScore = 0;
+
+            let rotations = 0;
+            if (direction === 'UP') rotations = 3;
+            if (direction === 'RIGHT') rotations = 2;
+            if (direction === 'DOWN') rotations = 1;
+
+            for (let i = 0; i < rotations; i++) grid = rotateGrid(grid);
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                let row = grid[r].filter(val => val !== 0);
+                for (let i = 0; i < row.length - 1; i++) {
+                    if (row[i] === row[i + 1]) {
+                        row[i] *= 2;
+                        addedScore += row[i];
+                        row.splice(i + 1, 1);
+                        if (row[i] === 2048) gameWin = true;
+                    }
+                }
+                while (row.length < GRID_SIZE) row.push(0);
+                if (JSON.stringify(grid[r]) !== JSON.stringify(row)) moved = true;
+                grid[r] = row;
+            }
+
+            for (let i = 0; i < (4 - rotations) % 4; i++) grid = rotateGrid(grid);
+
+            if (moved) {
+                addRandomTile();
+                score += addedScore;
+                if (checkGameOver()) gameOver = true;
+                updateUI();
+            }
+        }
+
+        function checkGameOver() {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === 0) return false;
+                    if (c < GRID_SIZE - 1 && grid[r][c] === grid[r][c + 1]) return false;
+                    if (r < GRID_SIZE - 1 && grid[r][c] === grid[r + 1][c]) return false;
+                }
+            }
+            return true;
+        }
+
+        // Input Handlers
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') move('UP');
+            if (e.key === 'ArrowDown') move('DOWN');
+            if (e.key === 'ArrowLeft') move('LEFT');
+            if (e.key === 'ArrowRight') move('RIGHT');
+        });
+
+        let touchStartX = null;
+        let touchStartY = null;
+
+        window.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        window.addEventListener('touchend', (e) => {
+            if (!touchStartX || !touchStartY) return;
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+
+            if (Math.max(absDx, absDy) > 30) {
+                if (absDx > absDy) {
+                    move(dx > 0 ? 'RIGHT' : 'LEFT');
+                } else {
+                    move(dy > 0 ? 'DOWN' : 'UP');
+                }
+            }
+            touchStartX = null;
+            touchStartY = null;
+        });
+
+        document.getElementById('reset-btn').onclick = initGame;
+        document.getElementById('restart-btn').onclick = initGame;
+
+        initGame();
+    </script>
+</body>
+</html>
